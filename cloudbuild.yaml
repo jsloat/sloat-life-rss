@@ -1,0 +1,56 @@
+steps:
+  - name: gcr.io/cloud-builders/git
+    id: Get latest FreshRSS source
+    entrypoint: /bin/sh
+    args:
+      - -c
+      - |
+        git clone https://github.com/FreshRSS/FreshRSS.git && \
+        cd FreshRSS/ && \
+        git pull && \
+        touch .gcloudignore
+  - name: gcr.io/cloud-builders/docker
+    id: Build fresh Docker image
+    dir: FreshRSS
+    args:
+      - build
+      - --no-cache
+      - --tag
+      - "$_GCR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA"
+      - -f
+      - Docker/Dockerfile
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - "$_GCR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA"
+    id: Push
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    args:
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - "--platform=managed"
+      - "--image=$_GCR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA"
+      - >-
+        --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID,$_LABELS
+      - "--region=$_DEPLOY_REGION"
+      - "--quiet"
+    id: Deploy
+    entrypoint: gcloud
+images:
+  - "$_GCR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA"
+options:
+  substitutionOption: ALLOW_LOOSE
+substitutions:
+  _GCR_HOSTNAME: us.gcr.io
+  _LABELS: gcb-trigger-id=b7b9da4f-0809-4eed-8012-e65cd4089fcf
+  _TRIGGER_ID: b7b9da4f-0809-4eed-8012-e65cd4089fcf
+  _PLATFORM: managed
+  _SERVICE_NAME: sloat-life-rss
+  _DEPLOY_REGION: us-central1
+tags:
+  - gcp-cloud-build-deploy-cloud-run
+  - gcp-cloud-build-deploy-cloud-run-managed
+  - sloat-life-rss
